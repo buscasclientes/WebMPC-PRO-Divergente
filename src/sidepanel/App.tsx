@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import InspectorScreen   from './components/InspectorScreen'
 import ConfigScreen      from './components/ConfigScreen'
 import AgentsScreen      from './components/AgentsScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import QuickActions      from './components/QuickActions'
+import DebugPanel        from './components/DebugPanel'
+
+import type { AIProvider, PageContext, HistoryEntry } from '../shared/types'
+import type { ChatMessage } from '../shared/aiClients'
+import { callAI } from '../shared/aiClients'
+import { DEFAULT_MODELS } from '../shared/constants'
+import { getSettings, appendHistory } from '../storage'
 
 // ── Iconos SVG inline (sin dependencias externas) ────────────
 const IconInspect = () => (
@@ -31,18 +38,169 @@ const IconConfig = () => (
     <circle cx="12" cy="12" r="3"/>
   </svg>
 )
+const IconDebug = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2v2M5 5l1.5 1.5M2 12h2M19 5l-1.5 1.5M20 12h2M5 19l1.5-1.5M19 19l-1.5-1.5M12 20v2M12 4a8 8 0 0 0-8 8v3a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-3a8 8 0 0 0-8-8z"/>
+  </svg>
+)
 
-type Tab = 'inspector' | 'agents' | 'history' | 'config'
-
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'inspector', label: 'Inspector', icon: <IconInspect /> },
-  { id: 'agents',    label: 'Agentes',   icon: <IconAgents />  },
-  { id: 'history',   label: 'Historial', icon: <IconHistory /> },
-  { id: 'config',    label: 'Config',    icon: <IconConfig />  },
-]
+type Tab = 'inspector' | 'agents' | 'history' | 'config' | 'debug'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('inspector')
+  const [provider, setProvider] = useState<AIProvider>('gemini')
+  const [prompt, setPrompt] = useState('')
+  const [response, setResponse] = useState('')
+  const [context, setContext] = useState<PageContext | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [tokensUsed, setTokens] = useState<number | null>(null)
+  const [elapsed, setElapsed] = useState<number | null>(null)
+  const [debugMode, setDebugMode] = useState(false)
+
+  // Cargar Modo Debug inicial y escuchar cambios
+  useEffect(() => {
+    chrome.storage.local.get('webmcp_debug_mode').then(r => {
+      setDebugMode(!!r['webmcp_debug_mode'])
+    })
+
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+      if (areaName === 'local' && changes['webmcp_debug_mode']) {
+        setDebugMode(!!changes['webmcp_debug_mode'].newValue)
+      }
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [])
+
+  // Capturar contexto de la página activa
+  async function handleCapturePage(): Promise<PageContext | null> {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', payload: null })
+      const ctx = res?.payload as PageContext | null
+      if (ctx) {
+        setContext(ctx)
+        setActiveTab('inspector')
+        return ctx
+      }
+    } catch (err) {
+      console.error('[WebMCP App] Error capturando contexto:', err)
+    }
+    return null
+  }
+
+  // Capturar texto seleccionado
+  async function handleCaptureSelection(): Promise<string | null> {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', payload: null })
+      const ctx = res?.payload as PageContext | null
+      if (ctx && ctx.selectedText) {
+        setPrompt(ctx.selectedText)
+        setActiveTab('inspector')
+        return ctx.selectedText
+      }
+    } catch (err) {
+      console.error('[WebMCP App] Error capturando seleccion:', err)
+    }
+    return null
+  }
+
+  // Limpiar panel de trabajo
+  function handleClear() {
+    setPrompt('')
+    setResponse('')
+    setContext(null)
+    setStatus('idle')
+    setTokens(null)
+    setElapsed(null)
+  }
+
+  // Ejecutar el prompt contra la API del modelo
+  async function runPrompt() {
+    if (!prompt.trim() || status === 'loading') return
+    setStatus('loading')
+    setResponse('')
+    setTokens(null)
+    setElapsed(null)
+
+    try {
+      const configs = await getSettings()
+      const cfg = configs.find(c => c.provider === provider)
+
+      if (!cfg?.apiKey) {
+        setResponse('⚠ No hay API Key configurada para ' + provider + '. Ve a Configuración.')
+        setStatus('error')
+        return
+      }
+
+      const fullPrompt = context
+        ? `Contexto de la página (${context.title}):\n${context.mainContent.slice(0, 2000)}\n\n---\n\n${prompt}`
+        : prompt
+
+      const messages: ChatMessage[] = [
+        { role: 'system', content: 'Eres un asistente de IA útil y preciso.' },
+        { role: 'user', content: fullPrompt }
+      ]
+
+      const chatResponse = await callAI(provider, messages, cfg.apiKey, cfg.model || DEFAULT_MODELS[provider])
+
+      setResponse(chatResponse.text)
+      setTokens(chatResponse.tokens_input + chatResponse.tokens_output)
+      setElapsed(chatResponse.duration_ms)
+      setStatus('success')
+
+      // Registrar en el historial
+      const entry: HistoryEntry = {
+        id: Math.random().toString(36).slice(2),
+        timestamp: Date.now(),
+        provider,
+        model: chatResponse.model,
+        prompt,
+        response: chatResponse.text,
+        tokensUsed: chatResponse.tokens_input + chatResponse.tokens_output,
+        durationMs: chatResponse.duration_ms,
+        status: 'success',
+        pageContext: context || undefined,
+      }
+      await appendHistory(entry).catch(() => { })
+
+    } catch (err) {
+      setResponse(`Error: ${String(err)}`)
+      setStatus('error')
+    }
+  }
+
+  // Escuchar atajos globales cuando el Side Panel está activo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault()
+        handleCapturePage()
+      } else if (e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        handleCaptureSelection()
+      } else if (e.altKey && e.key === 'Enter') {
+        e.preventDefault()
+        runPrompt()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [prompt, context, provider, status])
+
+  const TABS = [
+    { id: 'inspector' as Tab, label: 'Inspector', icon: <IconInspect /> },
+    { id: 'agents' as Tab,    label: 'Agentes',   icon: <IconAgents />  },
+    { id: 'history' as Tab,   label: 'Historial', icon: <IconHistory /> },
+    { id: 'config' as Tab,    label: 'Config',    icon: <IconConfig />  },
+  ]
+
+  if (debugMode) {
+    TABS.push({ id: 'debug' as Tab, label: 'Debug', icon: <IconDebug /> })
+  }
 
   return (
     <div className="flex flex-col h-full bg-surface-900 overflow-hidden">
@@ -64,14 +222,35 @@ export default function App() {
       </header>
 
       {/* ── Quick Actions ────────────────────────────────────── */}
-      <QuickActions />
+      <QuickActions
+        onCapturePage={handleCapturePage}
+        onCaptureSelection={handleCaptureSelection}
+        onClear={handleClear}
+      />
 
       {/* ── Contenido principal ──────────────────────────────── */}
       <main className="flex-1 overflow-y-auto animate-fade-in">
-        {activeTab === 'inspector' && <InspectorScreen />}
+        {activeTab === 'inspector' && (
+          <InspectorScreen
+            provider={provider}
+            setProvider={setProvider}
+            prompt={prompt}
+            setPrompt={setPrompt}
+            response={response}
+            setResponse={setResponse}
+            context={context}
+            setContext={setContext}
+            status={status}
+            tokensUsed={tokensUsed}
+            elapsed={elapsed}
+            runPrompt={runPrompt}
+            onCapturePage={handleCapturePage}
+          />
+        )}
         {activeTab === 'agents'    && <AgentsScreen />}
         {activeTab === 'history'   && <HistoryScreen />}
-        {activeTab === 'config'    && <ConfigScreen />}
+        {activeTab === 'config'    && <ConfigScreen setActiveTab={setActiveTab} />}
+        {activeTab === 'debug'     && <DebugPanel />}
       </main>
 
       {/* ── Tab Bar ──────────────────────────────────────────── */}

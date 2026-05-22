@@ -9,8 +9,8 @@ export interface AIConfig {
   provider: AIProvider
   apiKey: string          // almacenada cifrada en chrome.storage
   model: string           // p.ej. "gemini-1.5-pro", "claude-3-5-sonnet"
-  maxTokens: number
-  temperature: number
+  maxTokens?: number
+  temperature?: number
 }
 
 // ── Servidor MCP ────────────────────────────────────────────
@@ -31,12 +31,19 @@ export interface MCPTool {
 
 // ── Contexto de página ──────────────────────────────────────
 export interface PageContext {
-  url: string
-  title: string
-  selectedText: string
-  visibleText: string     // primeros N chars del body visible
-  timestamp: number
-  tabId: number
+  url:          string
+  title:        string
+  description:  string
+  author?:      string
+  publishDate?: string
+  mainContent:  string       // contenido limpio
+  selectedText?: string      // texto seleccionado
+  images:       string[]     // primeros 5 alts
+  links:        Array<{ text: string; href: string }> // primeros 10 links internos
+  wordCount:    number
+  lang:         string
+  timestamp:    number
+  tabId:        number
 }
 
 // ── Historial de llamadas ───────────────────────────────────

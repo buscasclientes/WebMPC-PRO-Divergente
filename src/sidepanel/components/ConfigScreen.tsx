@@ -1,8 +1,7 @@
-// ── Config Screen (T-11) ────────────────────────────────────
-// Gestión segura de API Keys con cifrado AES-256 (T-24)
 import { useState, useEffect } from 'react'
 import type { AIProvider } from '../../shared/types'
 import { DEFAULT_MODELS } from '../../shared/constants'
+import { getSettings, setSettings, getDebugMode, setDebugMode } from '../../storage'
 
 interface ProviderConfig {
   provider: AIProvider
@@ -16,19 +15,26 @@ const PROVIDERS: { id: AIProvider; label: string; placeholder: string }[] = [
   { id: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
 ]
 
-export default function ConfigScreen() {
+interface ConfigScreenProps {
+  setActiveTab?: (tab: 'inspector' | 'agents' | 'history' | 'config' | 'debug') => void
+}
+
+export default function ConfigScreen({ setActiveTab }: ConfigScreenProps) {
   const [configs, setConfigs] = useState<ProviderConfig[]>([])
   const [saved,   setSaved]   = useState(false)
   const [show,    setShow]    = useState<Record<AIProvider, boolean>>({ gemini: false, claude: false, openai: false })
+  const [debugMode, setLocalDebugMode] = useState(false)
 
   useEffect(() => {
-    chrome.storage.local.get('webmcp_ai_configs').then(result => {
-      const stored = result['webmcp_ai_configs'] as ProviderConfig[] | undefined
+    getSettings().then(stored => {
       if (stored?.length) {
         setConfigs(stored)
       } else {
         setConfigs(PROVIDERS.map(p => ({ provider: p.id, apiKey: '', model: DEFAULT_MODELS[p.id] })))
       }
+    })
+    getDebugMode().then(val => {
+      setLocalDebugMode(val)
     })
   }, [])
 
@@ -38,9 +44,14 @@ export default function ConfigScreen() {
   }
 
   async function save() {
-    await chrome.storage.local.set({ webmcp_ai_configs: configs })
+    await setSettings(configs)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function toggleDebug(val: boolean) {
+    setLocalDebugMode(val)
+    await setDebugMode(val)
   }
 
   return (
@@ -106,6 +117,34 @@ export default function ConfigScreen() {
           </div>
         )
       })}
+
+      {/* Modo Debug Toggle */}
+      <div className="card flex flex-col gap-2">
+        <div className="flex items-center justify-between py-1">
+          <div>
+            <p className="text-xs font-semibold text-slate-200">Modo Debug</p>
+            <p className="text-[10px] text-slate-500">Habilita registro de trazas de APIs e interacciones MCP.</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              id="toggle-debug-mode"
+              type="checkbox"
+              className="sr-only peer"
+              checked={debugMode}
+              onChange={e => toggleDebug(e.target.checked)}
+            />
+            <div className="w-9 h-5 bg-surface-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+        {debugMode && setActiveTab && (
+          <button
+            className="text-[10px] text-primary-400 hover:text-primary-300 underline font-medium mt-1 text-left"
+            onClick={() => setActiveTab('debug')}
+          >
+            Ver trazas activas (Log de Debug) &rarr;
+          </button>
+        )}
+      </div>
 
       <button id="btn-save-config" className="btn-primary justify-center" onClick={save}>
         {saved

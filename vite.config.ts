@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
 import { resolve } from 'path'
-import { copyFileSync, mkdirSync, existsSync, renameSync } from 'fs'
+import { copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs'
 
 // Plugin para copiar el manifest.json y mover el HTML al lugar correcto
 function chromeExtensionPlugin() {
@@ -20,8 +20,7 @@ function chromeExtensionPlugin() {
       if (existsSync(htmlSrc)) {
         mkdirSync(resolve(__dirname, 'dist/sidepanel'), { recursive: true })
         // Leer, reescribir rutas absolutas a relativas, y guardar
-        const { readFileSync, writeFileSync } = require('fs')
-        let html = readFileSync(htmlSrc, 'utf-8') as string
+        let html = readFileSync(htmlSrc, 'utf-8')
         // Chrome extensions necesitan rutas relativas, no absolutas
         html = html
           .replace(/src="\/sidepanel\//g,   'src="./')

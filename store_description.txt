@@ -1,0 +1,96 @@
+# Chrome Web Store Metadata and Descriptions - WebMCP
+
+This file contains the final metadata and descriptions for submitting the WebMCP extension to the Chrome Web Store.
+
+---
+
+## 1. GENERAL METADATA
+
+- **Extension Name**: WebMCP – Model Context Tool Inspector (37 characters - limit: 45)
+- **Short Description**: Inspector y depurador de prompts para flujos de IA con soporte MCP, Gemini, Claude y OpenAI (103 characters - limit: 132)
+- **Category**: Developer Tools
+- **Default Language**: English (en-US)
+- **Developer Website**: https://github.com/dario/WebMCP-Extension
+- **Privacy Policy URL**: (Publish the privacy_policy.md file on GitHub Pages, Notion, or your own site, and enter the HTTPS URL here)
+
+---
+
+## 2. ENGLISH LISTING (Primary)
+
+### Short Description (Max 132 characters)
+Inspect and debug AI prompt workflows, connect to WebSocket MCP servers, and query Gemini, Claude, and OpenAI from Chrome's Side Panel.
+
+### Detailed Description (Max 5,000 characters)
+WebMCP – Model Context Tool Inspector
+
+Inspect, debug, and automate your AI workflows directly from Chrome's native Side Panel. WebMCP bridges the gap between web page context, local development tools, and powerful Large Language Models (LLMs).
+
+🔍 PROMPT INSPECTOR
+- Design and test prompts in real-time.
+- Extract main text content or raw HTML from any web page with one click and use it as prompt context.
+- Render responses in clean Markdown format with syntax-highlighted code blocks.
+
+🔧 REAL MCP INTEGRATION
+- Connect to local or remote Model Context Protocol (MCP) servers via WebSockets.
+- Persistently maintain WebSocket connections in the background, keeping connections alive even when the side panel is closed.
+- Automatically fetch and list available tools from your MCP servers, execute them directly from the UI, and inspect the JSON-RPC request/response payload.
+
+⚡ ONE-CLICK AUTOMATION & HOTKEYS
+- Extract active tab text content as context instantly (Alt + E).
+- Capture highlighted text from pages directly into the user prompt area (Alt + S).
+- Send requests using quick shortcuts (Alt + Enter).
+
+📊 HISTORY & MONITORING
+- Keep a detailed log of all AI requests and MCP tool invocations.
+- Monitor token usage (input/output), API latency, response status, and estimated costs.
+- Use the Debug Panel to audit raw JSON payloads, inspect headers, and trace errors.
+
+🔒 SECURITY & PRIVACY FIRST
+- API keys are encrypted locally using AES-256-GCM via the Web Crypto API.
+- All communications are direct from your browser to your selected AI providers (Google Gemini, Anthropic Claude, OpenAI). No third-party servers see your data.
+- Built-in automatic masking censors API keys and bearer tokens in debug logs to prevent accidental exposure.
+
+Perfect for prompt engineers, AI developers, and anyone building integrations with the Model Context Protocol.
+
+*Note: Requires your own API keys for Google Gemini, Anthropic Claude, or OpenAI.*
+
+---
+
+## 3. SPANISH LISTING
+
+### Short Description (Max 132 characters)
+Inspecciona y depura flujos de IA, conecta con servidores WebSocket MCP y consulta Gemini, Claude y OpenAI desde el panel lateral.
+
+### Detailed Description (Max 5,000 characters)
+WebMCP – Model Context Tool Inspector
+
+Inspecciona, depura y automatiza tus flujos de trabajo con modelos de IA directamente desde el panel lateral nativo de Chrome. WebMCP conecta el contexto de cualquier página web con tus herramientas locales y las APIs de los modelos de lenguaje más potentes.
+
+🔍 INSPECTOR DE PROMPTS
+- Diseña y prueba tus prompts en tiempo real.
+- Extrae el texto principal o el HTML de cualquier página web activa con un solo clic para usarlo como contexto.
+- Renderiza las respuestas de IA en formato Markdown fluido con bloques de código resaltados.
+
+🔧 INTEGRACIÓN MCP REAL
+- Conecta a servidores Model Context Protocol (MCP) locales o remotos mediante WebSockets.
+- Conexiones persistentes en el Background Service Worker, manteniéndose activas incluso al cerrar el panel lateral.
+- Obtén y lista automáticamente las herramientas disponibles en tus servidores, ejecútalas desde la interfaz y audita los mensajes JSON-RPC.
+
+⚡ AUTOMATIZACIÓN EN UN CLIC Y ATAJOS
+- Extrae el texto de la pestaña activa como contexto de IA al instante (Alt + E).
+- Captura la selección de texto activa de la página directamente al prompt (Alt + S).
+- Envía tus peticiones rápidamente con atajos de teclado (Alt + Enter).
+
+📊 HISTORIAL Y MONITORIZACIÓN
+- Registra de forma local todas las peticiones a APIs de IA y ejecuciones de herramientas MCP.
+- Realiza un seguimiento de los tokens consumidos (entrada/salida), latencia de red, códigos de estado y estimaciones de costes.
+- Panel Debug dedicado para ver trazas JSON estructuradas, cabeceras y depuración de errores.
+
+🔒 SEGURIDAD Y PRIVACIDAD PRIMERO
+- Tus API Keys se almacenan cifradas localmente en tu dispositivo mediante AES-256-GCM (Web Crypto API).
+- Conexiones directas a los proveedores oficiales (Google Gemini, Anthropic Claude, OpenAI). Tus datos nunca pasan por servidores intermediarios.
+- Censura automática integrada de cabeceras de autorización y claves de API en las trazas de depuración.
+
+Ideal para ingenieros de prompts, desarrolladores de IA y equipos que implementan soluciones con el Model Context Protocol.
+
+*Requiere API Keys propias de Google Gemini, Anthropic Claude o OpenAI.*

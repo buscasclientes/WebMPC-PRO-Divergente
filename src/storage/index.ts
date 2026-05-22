@@ -7,6 +7,8 @@ import {
   DEFAULT_SETTINGS,
 } from '../shared/constants'
 
+import { encryptApiKey, decryptApiKey } from './crypto'
+
 // ── Tipos internos ───────────────────────────────────────────
 type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS]
 
@@ -26,7 +28,38 @@ async function remove(key: StorageKey): Promise<void> {
 
 // ── Settings ─────────────────────────────────────────────────
 export async function getSettings(): Promise<ExtensionSettings['aiConfigs']> {
-  return get(STORAGE_KEYS.AI_CONFIGS, [])
+  const rawConfigs = await get(STORAGE_KEYS.AI_CONFIGS, [] as ExtensionSettings['aiConfigs'])
+  const decryptedConfigs = await Promise.all(
+    rawConfigs.map(async (cfg) => {
+      if (cfg.apiKey) {
+        try {
+          const decrypted = await decryptApiKey(cfg.apiKey)
+          return { ...cfg, apiKey: decrypted }
+        } catch {
+          return { ...cfg, apiKey: '' }
+        }
+      }
+      return cfg
+    })
+  )
+  return decryptedConfigs
+}
+
+export async function setSettings(configs: ExtensionSettings['aiConfigs']): Promise<void> {
+  const encryptedConfigs = await Promise.all(
+    configs.map(async (cfg) => {
+      if (cfg.apiKey) {
+        try {
+          const encrypted = await encryptApiKey(cfg.apiKey)
+          return { ...cfg, apiKey: encrypted }
+        } catch {
+          return { ...cfg, apiKey: '' }
+        }
+      }
+      return cfg
+    })
+  )
+  await set(STORAGE_KEYS.AI_CONFIGS, encryptedConfigs)
 }
 
 export async function getActiveProvider() {

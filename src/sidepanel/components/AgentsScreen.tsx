@@ -1,5 +1,5 @@
 // ── Agents MCP Screen (T-12) ─────────────────────────────────
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { MCPServer, MCPTool } from '../../shared/types'
 
 function randomId() {
@@ -11,12 +11,21 @@ export default function AgentsScreen() {
   const [newUrl,  setNewUrl]  = useState('')
   const [newName, setNewName] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
-  const wsRefs = useRef<Record<string, WebSocket>>({})
 
   useEffect(() => {
     chrome.storage.local.get('webmcp_mcp_servers').then(r => {
       setServers((r['webmcp_mcp_servers'] as MCPServer[]) ?? [])
     })
+
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+      if (areaName === 'local' && changes['webmcp_mcp_servers']) {
+        setServers((changes['webmcp_mcp_servers'].newValue as MCPServer[]) ?? [])
+      }
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
   }, [])
 
   async function persist(updated: MCPServer[]) {
@@ -38,65 +47,39 @@ export default function AgentsScreen() {
     setNewName('')
   }
 
-  function removeServer(id: string) {
-    wsRefs.current[id]?.close()
-    delete wsRefs.current[id]
+  async function removeServer(id: string) {
+    try {
+      await chrome.runtime.sendMessage({ type: 'MCP_DISCONNECT', payload: { id } })
+    } catch (e) {
+      console.error(e)
+    }
     persist(servers.filter(s => s.id !== id))
   }
 
-  function connect(server: MCPServer) {
-    updateStatus(server.id, 'connecting')
+  async function connect(server: MCPServer) {
+    setServers(prev => prev.map(s => s.id === server.id ? { ...s, status: 'connecting' } : s))
     try {
-      const ws = new WebSocket(server.url)
-      wsRefs.current[server.id] = ws
-
-      ws.onopen = () => {
-        updateStatus(server.id, 'connected')
-        // Enviar initialize MCP
-        ws.send(JSON.stringify({
-          jsonrpc: '2.0', id: 1, method: 'initialize',
-          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'WebMCP', version: '1.0.0' } },
-        }))
-        // Solicitar lista de tools
-        ws.send(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }))
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data as string)
-          if (data.id === 2 && data.result?.tools) {
-            const tools: MCPTool[] = data.result.tools.map((t: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
-              name:        t.name,
-              description: t.description ?? '',
-              inputSchema: t.inputSchema ?? {},
-            }))
-            setServers(prev => prev.map(s => s.id === server.id ? { ...s, tools } : s))
-            chrome.storage.local.get('webmcp_mcp_servers').then(r => {
-              const updated = ((r['webmcp_mcp_servers'] as MCPServer[]) ?? []).map(
-                s => s.id === server.id ? { ...s, tools } : s,
-              )
-              chrome.storage.local.set({ webmcp_mcp_servers: updated })
-            })
-          }
-        } catch { /* parse error */ }
-      }
-
-      ws.onerror  = () => updateStatus(server.id, 'error')
-      ws.onclose  = () => updateStatus(server.id, 'disconnected')
-    } catch {
-      updateStatus(server.id, 'error')
+      await chrome.runtime.sendMessage({
+        type: 'MCP_CONNECT',
+        payload: { id: server.id, name: server.name, url: server.url },
+      })
+    } catch (err) {
+      console.error(err)
+      setServers(prev => prev.map(s => s.id === server.id ? { ...s, status: 'error' } : s))
     }
   }
 
-  function disconnect(id: string) {
-    wsRefs.current[id]?.close()
-    delete wsRefs.current[id]
-    updateStatus(id, 'disconnected')
+  async function disconnect(id: string) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'MCP_DISCONNECT',
+        payload: { id },
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
 
-  function updateStatus(id: string, status: MCPServer['status']) {
-    setServers(prev => prev.map(s => s.id === id ? { ...s, status } : s))
-  }
 
   const statusDot = (s: MCPServer['status']) => {
     switch (s) {

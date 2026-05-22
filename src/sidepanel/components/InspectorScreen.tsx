@@ -1,118 +1,47 @@
 // ── Inspector Screen (T-10) ──────────────────────────────────
 // Editor de prompts + envío a IA + visualizador de respuesta
-import { useState, useRef } from 'react'
 import type { AIProvider, PageContext } from '../../shared/types'
-import { DEFAULT_MODELS } from '../../shared/constants'
 
 const PROVIDERS: { id: AIProvider; label: string; color: string }[] = [
-  { id: 'gemini', label: 'Gemini',  color: 'text-blue-400' },
-  { id: 'claude', label: 'Claude',  color: 'text-amber-400' },
-  { id: 'openai', label: 'OpenAI',  color: 'text-emerald-400' },
+  { id: 'gemini', label: 'Gemini', color: 'text-blue-400' },
+  { id: 'claude', label: 'Claude', color: 'text-amber-400' },
+  { id: 'openai', label: 'OpenAI', color: 'text-emerald-400' },
 ]
 
-type Status = 'idle' | 'loading' | 'success' | 'error'
+interface InspectorScreenProps {
+  provider: AIProvider
+  setProvider: (p: AIProvider) => void
+  prompt: string
+  setPrompt: (p: string) => void
+  response: string
+  setResponse: (r: string) => void
+  context: PageContext | null
+  setContext: (ctx: PageContext | null) => void
+  status: 'idle' | 'loading' | 'success' | 'error'
+  tokensUsed: number | null
+  elapsed: number | null
+  runPrompt: () => Promise<void>
+  onCapturePage: () => Promise<PageContext | null>
+}
 
-export default function InspectorScreen() {
-  const [provider,  setProvider]  = useState<AIProvider>('gemini')
-  const [prompt,    setPrompt]    = useState('')
-  const [response,  setResponse]  = useState('')
-  const [context,   setContext]   = useState<PageContext | null>(null)
-  const [status,    setStatus]    = useState<Status>('idle')
-  const [tokensUsed, setTokens]   = useState<number | null>(null)
-  const [elapsed,   setElapsed]   = useState<number | null>(null)
-  const startRef = useRef<number>(0)
+export default function InspectorScreen({
+  provider,
+  setProvider,
+  prompt,
+  setPrompt,
+  response,
+  setResponse,
+  context,
+  setContext,
+  status,
+  tokensUsed,
+  elapsed,
+  runPrompt,
+  onCapturePage,
+}: InspectorScreenProps) {
 
-  async function captureContext() {
-    try {
-      const res = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', payload: null })
-      setContext(res?.payload ?? null)
-    } catch { /* sin contexto */ }
-  }
-
-  async function runPrompt() {
-    if (!prompt.trim()) return
-    setStatus('loading')
-    setResponse('')
-    setTokens(null)
-    setElapsed(null)
-    startRef.current = Date.now()
-
-    try {
-      // Obtener API key desde storage
-      const store  = await chrome.storage.local.get(`webmcp_ai_configs`)
-      const configs = (store['webmcp_ai_configs'] as { provider: string; apiKey: string; model: string }[]) ?? []
-      const cfg = configs.find(c => c.provider === provider)
-
-      if (!cfg?.apiKey) {
-        setResponse('⚠ No hay API Key configurada para ' + provider + '. Ve a Configuración.')
-        setStatus('error')
-        return
-      }
-
-      const fullPrompt = context
-        ? `Contexto de la página (${context.title}):\n${context.visibleText.slice(0, 2000)}\n\n---\n\n${prompt}`
-        : prompt
-
-      let result = ''
-      let tokens = 0
-
-      if (provider === 'gemini') {
-        const model = cfg.model || DEFAULT_MODELS.gemini
-        const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] }),
-          },
-        )
-        const data = await r.json()
-        result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? JSON.stringify(data, null, 2)
-        tokens = data.usageMetadata?.totalTokenCount ?? 0
-
-      } else if (provider === 'claude') {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': cfg.apiKey,
-            'anthropic-version': '2023-06-01',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model:      cfg.model || DEFAULT_MODELS.claude,
-            max_tokens: 4096,
-            messages:   [{ role: 'user', content: fullPrompt }],
-          }),
-        })
-        const data = await r.json()
-        result = data.content?.[0]?.text ?? JSON.stringify(data, null, 2)
-        tokens = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0)
-
-      } else {
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization:  `Bearer ${cfg.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model:    cfg.model || DEFAULT_MODELS.openai,
-            messages: [{ role: 'user', content: fullPrompt }],
-          }),
-        })
-        const data = await r.json()
-        result = data.choices?.[0]?.message?.content ?? JSON.stringify(data, null, 2)
-        tokens = data.usage?.total_tokens ?? 0
-      }
-
-      setResponse(result)
-      setTokens(tokens)
-      setElapsed(Date.now() - startRef.current)
-      setStatus('success')
-    } catch (err) {
-      setResponse(`Error: ${String(err)}`)
-      setStatus('error')
-    }
+  async function handleCaptureContext() {
+    await onCapturePage()
   }
 
   return (
@@ -126,11 +55,10 @@ export default function InspectorScreen() {
               key={p.id}
               id={`provider-${p.id}`}
               onClick={() => setProvider(p.id)}
-              className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-all duration-150 ${
-                provider === p.id
+              className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-all duration-150 ${provider === p.id
                   ? `border-primary-500 bg-primary-600/20 ${p.color}`
                   : 'border-surface-500 bg-surface-700 text-slate-500 hover:text-slate-300'
-              }`}
+                }`}
             >
               {p.label}
             </button>
@@ -157,7 +85,7 @@ export default function InspectorScreen() {
           <button
             id="btn-capture-ctx"
             className="btn-ghost py-0.5 px-2 text-[10px]"
-            onClick={captureContext}
+            onClick={handleCaptureContext}
           >
             + Contexto página
           </button>
@@ -182,12 +110,12 @@ export default function InspectorScreen() {
       >
         {status === 'loading' ? (
           <>
-            <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+            <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
             Procesando…
           </>
         ) : (
           <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
             Enviar Prompt
           </>
         )}
@@ -206,7 +134,7 @@ export default function InspectorScreen() {
                 <span className="badge-gray">{(elapsed / 1000).toFixed(1)}s</span>
               )}
               {status === 'success' && <span className="badge-green">OK</span>}
-              {status === 'error'   && <span className="badge-red">Error</span>}
+              {status === 'error' && <span className="badge-red">Error</span>}
             </div>
           </div>
           <div className="code-block max-h-64 text-slate-300">
@@ -214,7 +142,10 @@ export default function InspectorScreen() {
           </div>
           <button
             className="btn-ghost mt-1 w-full justify-center text-[10px]"
-            onClick={() => navigator.clipboard.writeText(response)}
+            onClick={() => {
+              navigator.clipboard.writeText(response)
+              setResponse(response) // No-op to avoid TS warnings or update state
+            }}
           >
             Copiar respuesta
           </button>
