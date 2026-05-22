@@ -35,7 +35,7 @@ function friendlyError(status: number, provider: string): string {
 export async function callGemini(
   messages: ChatMessage[],
   apiKey: string,
-  model = 'gemini-2.0-flash',
+  model = 'gemini-2.5-flash',
 ): Promise<ChatResponse> {
   const start = Date.now()
   const systemMsg = messages.find(m => m.role === 'system')

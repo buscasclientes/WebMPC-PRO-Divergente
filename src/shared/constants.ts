@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS = {
 }
 
 export const DEFAULT_MODELS: Record<string, string> = {
-  gemini:  'gemini-1.5-pro',
+  gemini:  'gemini-2.5-flash',
   claude:  'claude-3-5-sonnet-20241022',
   openai:  'gpt-4o',
 }
