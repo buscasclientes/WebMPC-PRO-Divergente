@@ -124,6 +124,37 @@ server.on('upgrade', (req, socket, head) => {
     try {
       const data = JSON.parse(messageText);
       
+      // Intercept standard MCP handshake requests from the extension
+      if (data.method && data.id) {
+        if (data.method === 'initialize') {
+          console.error('[Bridge] Responding to initialize handshake from extension...');
+          sendToExtension({
+            jsonrpc: '2.0',
+            id: data.id,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: {},
+              serverInfo: {
+                name: 'webmcp-agent-bridge',
+                version: '1.0.0'
+              }
+            }
+          });
+          return;
+        }
+        if (data.method === 'tools/list') {
+          console.error('[Bridge] Responding to tools/list request from extension...');
+          sendToExtension({
+            jsonrpc: '2.0',
+            id: data.id,
+            result: {
+              tools: []
+            }
+          });
+          return;
+        }
+      }
+
       // If it's a response to a tool call we forwarded
       if (data.type === 'tool_result' && data.id) {
         const pending = pendingRequests.get(data.id);
