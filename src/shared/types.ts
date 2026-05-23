@@ -83,6 +83,8 @@ export type MessageType =
   | 'MCP_TOOL_RESPONSE'
   | 'DEBUG_LOG'
   | 'STORAGE_UPDATED'
+  | 'EXECUTE_AUTOMATION'
+  | 'AUTOMATION_RESPONSE'
 
 export interface Message<T = unknown> {
   type: MessageType

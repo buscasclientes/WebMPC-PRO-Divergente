@@ -42,6 +42,7 @@ export class McpClient {
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null
   private statusListeners: McpStatusListener[] = []
   private initialized = false
+  private rawMessageListeners: ((raw: string) => void)[] = []
 
   constructor(
     private readonly url: string,
@@ -54,6 +55,20 @@ export class McpClient {
     this.statusListeners.push(listener)
     return () => {
       this.statusListeners = this.statusListeners.filter(l => l !== listener)
+    }
+  }
+
+  // ── Listeners de mensajes crudos (para el puente de agentes) ──
+  onRawMessage(listener: (raw: string) => void): () => void {
+    this.rawMessageListeners.push(listener)
+    return () => {
+      this.rawMessageListeners = this.rawMessageListeners.filter(l => l !== listener)
+    }
+  }
+
+  sendRawMessage(message: string): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(message)
     }
   }
 
@@ -87,7 +102,9 @@ export class McpClient {
       }
 
       this.ws.onmessage = (event: MessageEvent) => {
-        this.handleMessage(event.data as string)
+        const raw = event.data as string
+        this.handleMessage(raw)
+        this.rawMessageListeners.forEach(l => l(raw))
       }
 
       this.ws.onerror = () => {

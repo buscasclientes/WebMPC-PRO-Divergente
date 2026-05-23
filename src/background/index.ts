@@ -13,6 +13,7 @@ async function reconnectActiveServers() {
     if (s.status === 'connected' || s.status === 'connecting') {
       const client = new McpClient(s.url)
       mcpClients.set(s.id, client)
+      setupBridgeListener(client)
       
       client.onStatusChange(async (status) => {
         const currentStored = await chrome.storage.local.get('webmcp_mcp_servers')
@@ -136,6 +137,7 @@ async function handleMessage(
 
       client = new McpClient(url)
       mcpClients.set(id, client)
+      setupBridgeListener(client)
 
       client.onStatusChange(async (status) => {
         const stored = await chrome.storage.local.get('webmcp_mcp_servers')
@@ -269,5 +271,116 @@ function extractPageContextFallback(): PageContext {
 chrome.tabs.onRemoved.addListener((tabId) => {
   console.log('[WebMCP BG] Tab cerrado:', tabId)
 })
+
+// ── Puente de Agentes (Enrutador) ───────────────────────────
+function setupBridgeListener(client: McpClient) {
+  client.onRawMessage(async (raw) => {
+    try {
+      const data = JSON.parse(raw)
+      if (data.type === 'execute_tool' && data.tool) {
+        const result = await handleBridgeToolCall(data.tool, data.arguments)
+        client.sendRawMessage(JSON.stringify({
+          type: 'tool_result',
+          id: data.id,
+          result
+        }))
+      }
+    } catch (err) {
+      try {
+        const data = JSON.parse(raw)
+        client.sendRawMessage(JSON.stringify({
+          type: 'tool_result',
+          id: data.id,
+          error: String(err)
+        }))
+      } catch {}
+    }
+  })
+}
+
+async function handleBridgeToolCall(tool: string, args: any): Promise<any> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) {
+    throw new Error('No active tab found')
+  }
+
+  if (tool === 'get_active_page_context') {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT', payload: null })
+      if (res?.payload) return res.payload
+    } catch {}
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractPageContextFallback,
+    })
+    return results[0]?.result || null
+  }
+
+  // Comandos de automatización
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, {
+      type: 'EXECUTE_AUTOMATION',
+      payload: { tool, arguments: args }
+    })
+    if (res?.success) {
+      return res.result
+    } else if (res?.error) {
+      throw new Error(res.error)
+    }
+    throw new Error('Error de automatización desconocido en el content script')
+  } catch (err) {
+    // Fallback: Ejecución mediante chrome.scripting.executeScript
+    if (tool === 'inject_script') {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (codeStr: string) => {
+          try {
+            return (0, eval)(codeStr);
+          } catch (e: any) {
+            return { error: e.message || String(e) };
+          }
+        },
+        args: [args.code]
+      })
+      const resVal = results[0]?.result
+      if (resVal && typeof resVal === 'object' && 'error' in resVal) {
+        throw new Error(resVal.error as string)
+      }
+      return resVal
+    } else if (tool === 'simulate_click') {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (sel: string) => {
+          const el = document.querySelector(sel) as HTMLElement
+          if (!el) return { error: `Element not found: ${sel}` }
+          el.click()
+          return { success: true }
+        },
+        args: [args.selector]
+      })
+      const resVal = results[0]?.result as any
+      if (resVal?.error) throw new Error(resVal.error)
+      return `Clicked element: ${args.selector}`
+    } else if (tool === 'fill_input') {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (sel: string, val: string) => {
+          const el = document.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          if (!el) return { error: `Element not found: ${sel}` }
+          el.value = val
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          el.dispatchEvent(new Event('change', { bubbles: true }))
+          return { success: true }
+        },
+        args: [args.selector, args.value]
+      })
+      const resVal = results[0]?.result as any
+      if (resVal?.error) throw new Error(resVal.error)
+      return `Filled input ${args.selector} with: ${args.value}`
+    }
+    throw err
+  }
+}
 
 console.log('[WebMCP BG] Service Worker iniciado.')
