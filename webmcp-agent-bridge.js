@@ -253,10 +253,22 @@ async function handleAgentMessage(rawMessage) {
             {
               name: 'get_active_page_context',
               description: 'Extracts the visible main text content, URL, title, selection, links, and metadata of the active Chrome tab.',
-              inputSchema: {
-                type: 'object',
-                properties: {}
-              }
+              inputSchema: { type: 'object', properties: {} }
+            },
+            {
+              name: 'get_page_content',
+              description: 'Returns the complete raw HTML source (outerHTML) of the active Chrome tab. Useful for deep DOM analysis.',
+              inputSchema: { type: 'object', properties: {} }
+            },
+            {
+              name: 'capture_screenshot',
+              description: 'Captures a full-color PNG screenshot of the visible area of the active Chrome tab and returns it as a Base64-encoded data URL. Use to visually inspect the current UI state.',
+              inputSchema: { type: 'object', properties: {} }
+            },
+            {
+              name: 'get_accessibility_tree',
+              description: 'Returns a semantic JSON tree of interactive elements (buttons, links, inputs, headings) visible in the active tab, including their CSS selectors, ARIA labels and roles. Use this for precise navigation before clicking.',
+              inputSchema: { type: 'object', properties: {} }
             },
             {
               name: 'simulate_click',
@@ -298,7 +310,15 @@ async function handleAgentMessage(rawMessage) {
         break;
 
       case 'tools/call':
-        const toolName = data.params?.name;
+        // Normalize prefixed tool names (webmcp:tool_name, browser:tool_name -> tool_name)
+        let toolName = data.params?.name || '';
+        const knownPrefixes = ['webmcp:', 'browser:', 'webmcp_'];
+        for (const prefix of knownPrefixes) {
+          if (toolName.startsWith(prefix)) {
+            toolName = toolName.slice(prefix.length);
+            break;
+          }
+        }
         const args = data.params?.arguments || {};
         
         if (!extensionSocket) {
@@ -315,13 +335,13 @@ async function handleAgentMessage(rawMessage) {
         // Register promise to wait for WS response from extension
         const promise = new Promise((resolve, reject) => {
           pendingRequests.set(requestId, { resolve, reject });
-          // Timeout after 15 seconds to prevent hanging the agent
+          // Timeout after 20 seconds (screenshots can be slow)
           setTimeout(() => {
             if (pendingRequests.has(requestId)) {
               pendingRequests.delete(requestId);
-              reject(new Error(`Timeout waiting for Chrome extension to execute tool ${toolName}`));
+              reject(new Error(`Timeout waiting for Chrome extension to execute tool: ${toolName}`));
             }
-          }, 15000);
+          }, 20000);
         });
 
         try {
@@ -335,14 +355,28 @@ async function handleAgentMessage(rawMessage) {
 
           // Wait for extension response
           const result = await promise;
-          response.result = {
-            content: [
-              {
-                type: 'text',
-                text: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-              }
-            ]
-          };
+
+          // For screenshots, wrap as image content for multimodal agents
+          if (toolName === 'capture_screenshot' && typeof result === 'string' && result.startsWith('data:image')) {
+            response.result = {
+              content: [
+                {
+                  type: 'image',
+                  data: result.replace(/^data:image\/\w+;base64,/, ''),
+                  mimeType: 'image/png'
+                }
+              ]
+            };
+          } else {
+            response.result = {
+              content: [
+                {
+                  type: 'text',
+                  text: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+                }
+              ]
+            };
+          }
         } catch (error) {
           response.error = {
             code: -32603,

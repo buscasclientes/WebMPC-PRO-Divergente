@@ -317,6 +317,35 @@ async function handleBridgeToolCall(tool: string, args: any): Promise<any> {
     return results[0]?.result || null
   }
 
+  if (tool === 'capture_screenshot') {
+    try {
+      const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
+      return dataUrl
+    } catch (err) {
+      throw new Error(`Screenshot failed: ${String(err)}`)
+    }
+  }
+
+  if (tool === 'get_page_content') {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'EXECUTE_AUTOMATION', payload: { tool: 'get_page_content', arguments: {} } })
+      if (res?.success) return res.result
+    } catch {}
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => document.documentElement.outerHTML,
+    })
+    return results[0]?.result || ''
+  }
+
+  if (tool === 'get_accessibility_tree') {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'EXECUTE_AUTOMATION', payload: { tool: 'get_accessibility_tree', arguments: {} } })
+      if (res?.success) return res.result
+    } catch {}
+    throw new Error('Accessibility tree extraction requires the content script to be active on this tab.')
+  }
+
   // Comandos de automatización
   try {
     const res = await chrome.tabs.sendMessage(tab.id, {
