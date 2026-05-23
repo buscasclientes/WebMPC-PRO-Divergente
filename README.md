@@ -76,6 +76,16 @@ node mock-mcp-server.js
 ```
 Este servidor correrá en `ws://localhost:8080` y registrará herramientas de simulación como `get_weather` y `calculate_hash`. Agrégalo en la pestaña **Agentes** del Side Panel para interactuar con él.
 
+### Conectar Agentes de IA Locales (Cursor, Claude, Antigravity)
+WebMCP Agent Bridge te permite conectar Cursor, Claude Desktop/Code o Antigravity directamente a tu navegador para realizar lecturas de contexto y automatizaciones.
+
+1. **Configurar Agentes**: Sigue las instrucciones de la [Guía de Configuración de Agentes](AGENTS_SETUP.md) o ejecuta `npm run configure-mcp` para configurar Claude Desktop automáticamente.
+2. **Iniciar el Bridge**:
+   ```bash
+   npm run bridge
+   ```
+3. **Conectar la Extensión**: En el Side Panel de WebMCP, ve a **Agentes**, introduce `ws://localhost:9000` y haz clic en **Conectar**.
+
 ### Ejecutar Suite de Pruebas Automatizadas
 Verifica el correcto funcionamiento del cifrado de credenciales, la censura de seguridad y la comunicación WebSocket ejecutando:
 

@@ -7,7 +7,9 @@
     "dev": "vite build --watch",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bridge": "node webmcp-agent-bridge.js",
+    "configure-mcp": "node configure-mcp.js"
   },
   "dependencies": {
     "react": "^18.3.1",
